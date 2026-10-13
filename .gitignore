@@ -1,0 +1,6 @@
+build/
+pico-sdk/
+pico-extras/
+PicoDVI/
+*.uf2
+.DS_Store
