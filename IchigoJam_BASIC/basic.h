@@ -2809,6 +2809,7 @@ static int sd_files_print_row(int number) {
 	put_chr('\n'); return 1;
 }
 // プログラム (LIST内部形式) をアスキーテキスト "行番号 本文"CRLF に変換する。容量超過時は-1。
+// 出力はUTF-8 (半角カナ 0xA1-0xDF → 3バイトのU+FF61-FF9F)。PCのモダンエディタでそのまま閲覧できる。
 static int sd_build_text_program(uint8_t *dst, unsigned capacity) {
 	unsigned pos = 0;
 	int index = 0;
@@ -2825,14 +2826,26 @@ static int sd_build_text_program(uint8_t *dst, unsigned capacity) {
 			do { rev[rc++] = (char)('0' + t % 10); t /= 10; } while (t);
 			while (rc) numbuf[nl++] = rev[--rc];
 		}
-		// 本文 (NULまで)
+		if (pos + (unsigned)nl + 1 + 2 > capacity) return -1;
+		memcpy(dst + pos, numbuf, (unsigned)nl); pos += (unsigned)nl;
+		dst[pos++] = ' ';
+		// 本文 (NULまで)。半角カナはUTF-8の3バイトへ変換する
 		const char *text = list + index + 3;
 		unsigned tl = 0;
 		while (tl < (unsigned)len && text[tl]) tl++;
-		if (pos + (unsigned)nl + 1 + tl + 2 > capacity) return -1;
-		memcpy(dst + pos, numbuf, (unsigned)nl); pos += (unsigned)nl;
-		dst[pos++] = ' ';
-		memcpy(dst + pos, text, tl); pos += tl;
+		for (unsigned k = 0; k < tl; k++) {
+			uint8_t c = (uint8_t)text[k];
+			if (c >= 0xA1 && c <= 0xBF) { // 半角カナ ｡-ｿ → U+FF61-FF7F
+				if (pos + 3 > capacity) return -1;
+				dst[pos++] = 0xEF; dst[pos++] = 0xBD; dst[pos++] = c;
+			} else if (c >= 0xC0 && c <= 0xDF) { // 半角カナ ﾀ-ﾟ → U+FF80-FF9F
+				if (pos + 3 > capacity) return -1;
+				dst[pos++] = 0xEF; dst[pos++] = 0xBE; dst[pos++] = c - 0x40;
+			} else { // ASCII・PCG等はそのまま (PCG 0xE0-0xFFは往復で元に戻る)
+				if (pos + 1 > capacity) return -1;
+				dst[pos++] = c;
+			}
+		}
 		dst[pos++] = '\r';
 		dst[pos++] = '\n';
 		index += len + 4;

@@ -425,8 +425,82 @@ static int sd_prepare_program(int n) {
     sd_program_file_size = file.size; return length;
 }
 
+// ===== UTF-8 → IchigoJam内部文字コード変換 =====
+// IchigoJamの半角カナはJIS X 0201の1バイトコード (0xA1-0xDF、romajikana.hと同じ配置)。
+// UTF-8の.BASをPCで作成した場合に文字化けしないよう、読み込み時に変換する。
+// 一致しないバイト・不完全な列はそのまま素通しするため、
+// Shift_JIS相当の生バイト (旧形式) ファイルもそのまま読み込める (自動判別)。
+
+// 全角カナ (U+30A1-30F6) → 半角カナ 変換テーブル。下位8bit=1文字目、上位8bit=2文字目 (0なら1文字)。0x0000=変換なし。
+// (ﾞ=0xDE、ﾟ=0xDF。PythonのUnicode正規化で生成しromajikana.h (0xDD=ﾝ等) と照合済み)
+static const uint16_t SD_FWKANA[86] = {
+    0x00A7, 0x00B1, 0x00A8, 0x00B2, 0x00A9, 0x00B3,
+    0x00AA, 0x00B4, 0x00AB, 0x00B5, 0x00B6, 0xDEB6,
+    0x00B7, 0xDEB7, 0x00B8, 0xDEB8, 0x00B9, 0xDEB9,
+    0x00BA, 0xDEBA, 0x00BB, 0xDEBB, 0x00BC, 0xDEBC,
+    0x00BD, 0xDEBD, 0x00BE, 0xDEBE, 0x00BF, 0xDEBF,
+    0x00C0, 0xDEC0, 0x00C1, 0xDEC1, 0x00AF, 0x00C2,
+    0xDEC2, 0x00C3, 0xDEC3, 0x00C4, 0xDEC4, 0x00C5,
+    0x00C6, 0x00C7, 0x00C8, 0x00C9, 0x00CA, 0xDECA,
+    0xDFCA, 0x00CB, 0xDECB, 0xDFCB, 0x00CC, 0xDECC,
+    0xDFCC, 0x00CD, 0xDECD, 0xDFCD, 0x00CE, 0xDECE,
+    0xDFCE, 0x00CF, 0x00D0, 0x00D1, 0x00D2, 0x00D3,
+    0x00AC, 0x00D4, 0x00AD, 0x00D5, 0x00AE, 0x00D6,
+    0x00D7, 0x00D8, 0x00D9, 0x00DA, 0x00DB, 0x0000,
+    0x00DC, 0x0000, 0x0000, 0x00A6, 0x00DD, 0xDEB3,
+    0x0000, 0x0000,
+};
+// UTF-8テキストをIchigoJam内部文字コードへ変換する (dst==src可。変換結果は必ず元長以下)。
+// 変換: BOM除去、半角カナ(U+FF61-FF9F)→0xA1-0xDF、全角カナ(U+30A1-30F6)→半角カナ1-2バイト、
+//       全角英数記号(U+FF01-FF5E)→ASCII、全角空白/、/。→SP/0xA4/0xA1、ー(U+30FC)→0xB0、¥(U+00A5)→0x5C。
+static unsigned sd_utf8_to_ij(uint8_t *dst, const uint8_t *src, unsigned len) {
+    unsigned r = 0, w = 0;
+    while (r < len) {
+        uint8_t b = src[r];
+        if (b < 0x80) { dst[w++] = b; r++; continue; }
+        if (b == 0xC2 && r + 1 < len && src[r + 1] == 0xA5) { // ¥ → 0x5C
+            dst[w++] = 0x5C; r += 2; continue;
+        }
+        if (b == 0xEF && r + 2 < len) {
+            uint8_t b2 = src[r + 1], b3 = src[r + 2];
+            if (b2 == 0xBB && b3 == 0xBF) { r += 3; continue; } // BOM除去
+            if (b2 == 0xBD) {
+                if (b3 >= 0xA1 && b3 <= 0xBF) { dst[w++] = b3; r += 3; continue; } // 半角カナ ｡-ｿ
+                if (b3 >= 0x80 && b3 <= 0x9E) { dst[w++] = (uint8_t)(b3 & 0x3F) + 0x60; r += 3; continue; } // 全角ASCII `-~
+            } else if (b2 == 0xBE) {
+                if (b3 >= 0x80 && b3 <= 0x9F) { dst[w++] = b3 + 0x40; r += 3; continue; } // 半角カナ ﾀ-ﾟ
+            } else if (b2 == 0xBC) {
+                if (b3 >= 0x81 && b3 <= 0xBF) { dst[w++] = b3 - 0x60; r += 3; continue; } // 全角ASCII !-_
+            }
+        }
+        if (b == 0xE3 && r + 2 < len) {
+            uint8_t b2 = src[r + 1], b3 = src[r + 2];
+            if ((b2 == 0x80 && b3 >= 0x80 && b3 <= 0x82) || // 全角空白/、/。
+                (b2 == 0x82 && b3 >= 0xA1 && b3 <= 0xBF) || // 全角カナ U+30A1-30BF
+                (b2 == 0x83 && b3 >= 0x80 && b3 <= 0xBC)) { // 全角カナ U+30C0-30FC
+                unsigned cp = 0x3000 + ((b2 & 0x3F) << 6) + (b3 & 0x3F);
+                if (cp == 0x3000) { dst[w++] = ' '; r += 3; continue; }
+                if (cp == 0x3001) { dst[w++] = 0xA4; r += 3; continue; } // ､
+                if (cp == 0x3002) { dst[w++] = 0xA1; r += 3; continue; } // ｡
+                if (cp == 0x30FC) { dst[w++] = 0xB0; r += 3; continue; } // ｰ
+                if (cp >= 0x30A1 && cp <= 0x30F6) {
+                    uint16_t v = SD_FWKANA[cp - 0x30A1];
+                    if (v) {
+                        dst[w++] = (uint8_t)(v & 0xFF);
+                        if (v >> 8) dst[w++] = (uint8_t)(v >> 8);
+                        r += 3; continue;
+                    }
+                }
+            }
+        }
+        dst[w++] = b; r++; // 素通し (生バイト・未知・不完全な列)
+    }
+    return w;
+}
+
 // LOAD/LRUN用 (アスキー.BAS)。テキストファイルをsd_file_dataへ読む。
 // 戻り値はテキスト長 (最初のNULまで。通常はファイルサイズそのまま)。
+// 読み込み後、UTF-8の文字列をIchigoJam内部文字コードへ変換する (sd_utf8_to_ij)。
 // ファイルエラーはsd_prepare_programと共通 (30未発見、33サイズ超過、35読み取り等)。
 static int sd_prepare_text_program(int n) {
     sd_file_error = 0; sd_read_error = 0;
@@ -439,6 +513,7 @@ static int sd_prepare_text_program(int n) {
     for (uint32_t i = 0; i < size; i++) {
         if (sd_file_data[i] == 0) { size = i; break; } // NULは行終端として扱わないため打ち切り
     }
+    size = sd_utf8_to_ij(sd_file_data, sd_file_data, size); // UTF-8→IchigoJam文字コード変換
     sd_program_file_size = file.size;
     return (int)size;
 }
@@ -710,16 +785,23 @@ static int sd_files_preview(int number, char *text, unsigned capacity) {
     uint32_t first = sd_fat.data_lba + (f->cluster - 2u) * sd_fat.sectors_per_cluster;
     if (!sd_read_checked(first)) { sd_file_error = 35; return -1; }
     if (sd_files_kind[n] == 2) {
-        // アスキー形式: 先頭行 "行番号 本文" の本文を取り出す
-        uint32_t i = 0, size = f->size;
+        // アスキー形式: 先頭行 "行番号 本文" を取り出し、UTF-8→IchigoJam変換後に本文をプレビューする
+        uint32_t size = f->size;
         if (size < 2 || size > 4096) return 3;
-        while (i < size && sd_sector[i] >= '0' && sd_sector[i] <= '9') i++;
-        if (i == 0 || i >= size || sd_sector[i] != ' ') return 3;
-        i++;
+        static uint8_t linebuf[300]; // 1行分の一時バッファ
+        unsigned lc = 0;
+        while (lc < 296 && sd_sector[lc] != '\r' && sd_sector[lc] != '\n' && sd_sector[lc] != 0) {
+            linebuf[lc++] = sd_sector[lc];
+        }
+        lc = sd_utf8_to_ij(linebuf, linebuf, lc);
+        unsigned p = 0;
+        while (p < lc && linebuf[p] >= '0' && linebuf[p] <= '9') p++;
+        if (p == 0 || p >= lc || linebuf[p] != ' ') return 3;
+        p++;
         unsigned written = 0;
-        while (i < size && sd_sector[i] != '\r' && sd_sector[i] != '\n' && sd_sector[i] != 0) {
-            if (written + 1 < capacity) text[written++] = (char)(sd_sector[i] < 32 ? '.' : sd_sector[i]);
-            i++;
+        while (p < lc) {
+            if (written + 1 < capacity) text[written++] = (char)(linebuf[p] < 32 ? '.' : linebuf[p]);
+            p++;
         }
         text[written] = 0;
         return written ? 1 : 3;
