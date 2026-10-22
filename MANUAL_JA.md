@@ -17,7 +17,7 @@ IchigoJam P2350 は、教育用こどもパソコン **IchigoJam** (BASIC言語)
 | 必須 | 品目 | 備考 |
 |---|---|---|
 | ○ | Waveshare RP2350-PiZero | 本体 |
-| ○ | DVI/HDMIモニタ | DVI互換 (HDCP不要)。mini HDMI→HDMIケーブルで接続 |
+| ○ | モニター (いずれか1つ) | ①DVI/HDMIモニタ (DVI互換、mini HDMI→HDMIケーブル) ②NTSC映像入力のテレビ等 (GP19に回路製作、§3.4参照) ③ILI9341搭載TFT液晶モジュール (4線SPI、§3.4参照) |
 | ○ | USBキーボード | Type-Cポートに直接接続 (変換アダプタ可) |
 | ○ | 電源 | Type-C 5V (PCのUSBポートで可)、またはPH2.0リチウムバッテリー |
 | △ | TFカード (microSD) | SDカード機能を使う場合。**FAT32フォーマット必須** |
@@ -38,7 +38,7 @@ IchigoJam P2350 は、教育用こどもパソコン **IchigoJam** (BASIC言語)
 
 ### 2.2 起動と接続
 
-1. HDMIモニタと接続して電源を入れる (PCのUSBポート等)
+1. モニターと接続して電源を入れる (PCのUSBポート等)。初期状態ではDVI (mini HDMI) モードです (NTSCテレビやTFT液晶を使う場合は§3.4)
 2. 画面に以下が表示されれば正常です:
 
 ```
@@ -97,25 +97,25 @@ OK
 | 1 | 3.3V | 2 | 5V (VBUS) |
 | 3 | **I2C1 SDA** (GP2) | 4 | 5V |
 | 5 | **I2C1 SCL** (GP3) | 6 | GND |
-| 7 | GP14 (自由) | 8 | **UART TX** (GP4) |
+| 7 | **TFT SCK** (GP14) | 8 | **UART TX** (GP4) |
 | 9 | GND | 10 | **UART RX** (GP5) |
 | 11 | **LED** (GP17) | 12 | **BTN** (GP18) |
 | 13 | **IN1** (GP27) | 14 | GND |
 | 15 | **OUT5** (GP22) | 16 | GP23 (自由) |
 | 17 | 3.3V | 18 | GP24 (自由) |
 | 19 | **OUT4** (GP11) | 20 | GND |
-| 21 | GP12 (自由) | 22 | GP25 (自由) |
+| 21 | **TFT RESET** (GP12) | 22 | GP25 (自由) |
 | 23 | **OUT3** (GP10) | 24 | **OUT1** (GP8) |
 | 25 | GND | 26 | **IN4** (GP7) |
 | 27 | GP0 (自由) | 28 | GP1 (自由) |
-| 29 | GP15 (自由) | 30 | GND |
+| 29 | **TFT MOSI** (GP15) | 30 | GND |
 | 31 | **IN3** (GP6) | 32 | **OUT2** (GP9) |
-| 33 | GP13 (自由) | 34 | GND |
-| 35 | GP19 (自由) | 36 | GP16 (自由) |
+| 33 | **TFT CS** (GP13) | 34 | GND |
+| 35 | **NTSC映像** (GP19) | 36 | **TFT DC** (GP16) |
 | 37 | **IN2** (GP26) | 38 | **SOUND** (GP20) |
 | 39 | GND | 40 | **OUT6** (GP21) |
 
-「自由」のピンはIchigoJam命令の割当がありません (POKEでの直接操作などに利用可)。
+「自由」のピンはIchigoJam命令の割当がありません (POKEでの直接操作などに利用可)。**GP12-16とGP19は映像出力用のピン**です (§3.4参照。DVI/NTSC/TFTで使わないモードの間はPOKEで自由に利用可)。
 
 > **注意**: 本基板はRP2350のADC対応ピン (GP40-47) が40ピンヘッダーに出ていません。そのため **`ANA()` はアナログ値ではなくデジタル値 (HIGH=1023 / LOW=0) を返します**。`BTN(0)`もデジタル入力です。
 
@@ -126,6 +126,50 @@ OK
 | DVI (HDMI) | GP32-39 | mini HDMIコネクタに接続済み |
 | **SDカード (TFスロット)** | GP30 (SCK), GP31 (MOSI), GP40 (MISO), GP43 (CS) | 基板内蔵スロット専用。ヘッダーのI/Oと**同時利用可** |
 | PIO-USBポート | GP28/29 | 基板の予備USBポート (将来対応予定) |
+
+### 3.4 映像出力の3モードと `SWITCH`コマンド
+
+`SWITCH`コマンドで映像出力を切り替えられます (F10キーでも可。モードはflashに保存され、次回起動時にそのモードで起動します)。
+
+```
+SWITCH 0    … DVI (mini HDMI)  ← 初期値
+SWITCH 1    … NTSCコンポジット (GP19)
+SWITCH 2    … TFT液晶 (ILI9341、GP12-16)
+SWITCH      … DVI→NTSC→TFTの順でトグル (F10キーと同じ)
+```
+
+| モード | 必要なもの | 特徴 |
+|---|---|---|
+| **DVI (SWITCH 0)** | mini HDMI→HDMIケーブル+DVI互換モニタ | 最速 (252MHz)。640x480p60 |
+| **NTSC (SWITCH 1)** | 下記の回路+テレビ等の映像入力 (黄色いビデオ端子) | CPUが157.5MHz駆動のためBASICはやや遅い。モード中はGP17のLEDが約1Hzで点滅 (動作表示) |
+| **TFT (SWITCH 2)** | ILI9341搭載TFT液晶モジュール (4線SPI、2.2〜3.2インチ推奨) | 252MHzのまま動作。ポータブル構成に最適 |
+
+**NTSC接続回路 (GP19 → 映像入力)**:
+
+```
+GP19 (35番ピン) -- 75Ω --- 映像入力 (映像ケーブルの芯線)
+                  |
+                 === 560pF
+                  |
+                 GND
+```
+
+**TFT (ILI9341) 接続表** — すべて「自由ピン」を使用するためIchigoJamのI/Oポートは消費しません:
+
+| TFTモジュールのピン | 接続先 | GP (物理ピン) |
+|---|---|---|
+| SCK / CLK / D_WRS | **TFT SCK** | GP14 (7番ピン) |
+| SDI / MOSI / D_SDI | **TFT MOSI** | GP15 (29番ピン) |
+| CS / D_CS | **TFT CS** | GP13 (33番ピン) |
+| DC / RS / D_WR | **TFT DC** | GP16 (36番ピン) |
+| RESET / D_RESET | **TFT RESET** | GP12 (21番ピン) |
+| VCC / LEDA | 3.3V (1番/17番ピン) | LEDAは抵抗 (数十Ω) 経由で明るさ調整可 |
+| GND | GND (6番/9番ピンなど) | |
+| SDO / MISO | **未接続でOK** (書き込み専用) | |
+
+- 4線SPI (Serial) インターフェースのILI9341モジュールに対応 (8bit/16bitパラレル専用のものは不可)
+- **TFTモード中のSDカード**: TFTとSDカードはSPI1を共用するため、SD読み書き中 (SDON〜SDOFF) は画面更新が一時停止し、終了後に自動再開します。TFTモードへの切替時にSDON中だと、SDを一旦オフにしてTFTを優先します (再度`SDON`で使用可)
+- 画面の全書き換え (CLS等) は約1フレーム (16ms) 強かかります。表示が化ける場合は`src/tft.h`の`TFT_SPI_BAUD`を15.75MHzに落としてください
 
 ## 4. BASICの基本操作
 
@@ -147,9 +191,11 @@ VIDEO 1 … 画面を半分の大きさ(16×12)に
 | F1 | CLP + CLS | F7 | `OUT0` (全出力OFF) |
 | F2 | `LOAD` | F8 | `VIDEO1` |
 | F3 | `SAVE` | F9 | `FILES` |
-| F4 | `LIST` | F10 | `SWITCH` (本機では無効) |
+| F4 | `LIST` | F10 | `SWITCH` (映像出力切替、§3.4) |
 | F5 | `RUN` | F11 | CLS |
 | F6 | `?FREE()` | F12 | 行取消 (CAN) |
+
+> **F10 (`SWITCH`)**: 映像出力を DVI→NTSC→TFT の順で切り替えます (§3.4)
 
 ### 4.3 キーボード / 日本語入力
 
@@ -251,7 +297,7 @@ FILES             … SD一覧 (SDON中。各行に先頭行のプレビュー�
 | ファイルサイズ | 1ファイル4096バイトまで |
 | GPT / 拡張パーティション / サブフォルダ | 非対応 |
 
-SD操作中も画面は表示されたままです (約1MHz転送、読み出し失敗時は自動で100kHzに落として再試行)。SAVEは「新規領域へ書き込み→照合→目録更新→旧領域解放」の順で行うため安全ですが、**SAVE中表示中に電源を切らない**でください。
+SD操作中も画面は表示されたままです (**TFTモードではSD読み書き中のみ画面更新が一時停止し、終了後に自動再開します**。約1MHz転送、読み出し失敗時は自動で100kHzに落として再試行)。SAVEは「新規領域へ書き込み→照合→目録更新→旧領域解放」の順で行うため安全ですが、**SAVE中表示中に電源を切らない**でください。
 
 ### 6.5 SDエラー一覧
 
@@ -282,7 +328,8 @@ SD操作中も画面は表示されたままです (約1MHz転送、読み出し
 | SDで `SD FS error 23` | FAT12/16でフォーマットされている → FAT32で再フォーマット |
 | 高負荷時に固まる | フラッシュチップが非Winbond (Puya等) の個体はオーバークロック時にQEビット未設定が原因のことがある → `flash_config`ツールの`FLASH_QE_SET_1.uf2`で恒久対策 (**2回実行禁止**。詳細はfrank-386のREADME参照) |
 | BEEP/SOUNDが鳴らない | GP20 (38番ピン) にスピーカー/アンプを接続 (PWM方形波出力) |
-| `SWITCH`が効かない | 本機はDVI (HDMI) 専用のため`SWITCH`コマンドは無効 (将来のNTSC対応に備えた予約) |
+| `SWITCH 1`で画面が出ない | GP19→75Ω直列+560pF (GND間) →映像入力の回路を確認。テレビ側が映像入力 (黄色端子) になっているか確認。NTSCモードのLED (GP17) が約1Hzで点滅=本体は動作中、高速点滅=内部異常 (GP19の回路を外して`SWITCH 0`に戻す) |
+| `SWITCH 2`でTFTに何も出ない | 配線確認 (§3.4の接続表。SCK/MOSI/DC/RESET/CSの5本+電源)。TFTがILI9341の4線SPIモデルか確認。表示が化ける/白画面のままの場合は`src/tft.h`の`TFT_SPI_BAUD`を15.75MHzに落として再ビルド |
 | 保存した外部EEPROMが見えない | `FILES0`で認識確認。I2C (3/5番ピン) の配線とプルアップ、アドレス0x50を確認 |
 
 ## 8. 開発者向け: ビルド方法
@@ -307,8 +354,8 @@ cmake --build build
 |---|---|
 | BASIC | IchigoJam BASIC 1.6.1 (4K版、GivetakeJam_P準拠の拡張: プログラム4096バイト、配列[0]〜[357]、`WS.LED`、`IR.IN`、`ENV.IN`) |
 | `VER()` / `VER(1)` | 16130 / 9 |
-| CPUクロック | 252MHz (DVI TMDSビットクロック) |
-| 映像 | DVI 640x480p60、32×24文字 |
+| CPUクロック | DVI/TFTモード: 252MHz、NTSCモード: 157.5MHz |
+| 映像 | `SWITCH`で3モード切替 — DVI 640x480p60 / NTSCコンポジット (GP19) / TFT ILI9341 (GP12-16)。いずれも32×24文字 |
 | 入力 | USBキーボード (Type-C、ネイティブUSBホスト)、UART、IN1-4/BTN |
 | 音声 | PWM 1ch (BEEP/SOUND/PLAY) |
 | 保存 | 内蔵フラッシュ100本 + EEPROM 32本 + SD 100本 |
@@ -320,5 +367,6 @@ cmake --build build
 - 4K版拡張は [GivetakeJam_P](https://github.com/Canon-boy4/ichigojam-firm) (Canon-boy4氏) 準拠 (MIT license)
 - SDカードドライバ (`src/sd_card.h`) は Canon-boy4氏 GivetakeJam_P (rp2350-16130ブランチ) の改変版 (MIT license)
 - PicoDVI (mlorenzati fork / 元 Wren6991 PicoDVI) は各自のライセンスに従う
+- NTSC出力 (`src/ntsc/`) はKenKen氏`rp2040_pwm_ntsc_textgraph`による著作物です (営利目的でなければ自由に利用可、利用明記が推奨)
 - **IchigoJamは株式会社jig.jpの登録商標**です。Raspberry Pi はRaspberry Pi財団の登録商標です
 - 本ファームウェアの利用には[IchigoJamロイヤリティフリープログラム利用規約](https://ichigojam.net/ichigojam-license.pdf)に同意の上で行ってください。第三者への配布にはライセンスが必要です: https://pcn.club/sp/ijp/

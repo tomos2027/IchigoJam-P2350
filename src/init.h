@@ -118,10 +118,167 @@ void vram_to_framebuf_all(bool visible_cursor) {
     }
 }
 
+//NTSC用フォントRAM (IchigoJamのフォント+PCG+カーソル表示用の0xFF)
+//診断用カナリアで前後を挟む (structで物理レイアウトを保証)
+struct {
+    volatile uint32_t canary1;
+    uint8_t fontram[256 * 8];
+    volatile uint32_t canary2;
+} ntsc_fg;
+#define ntsc_fontram ntsc_fg.fontram
+static volatile uint32_t ntsc_diag_error = 0;//診断用: 検知したメモリ破壊 (1:Fontp 2:vram 4:videomode 8:フォントRAM境界 16:DMAバッファ境界 32:走査線カウンタ 64:拡大倍率)
+static uint32_t ntsc_diag_frames = 0;//診断用: 破壊を検知した時のフレーム数
+
+//NTSCの1走査線ごとに呼ばれる (_g.linecnt++: TICK()、WAIT -n用)
+static void ntsc_line_callback() {
+    _g.linecnt++;
+}
+
+//1フレーム分vramの内容をNTSCのTVRAMに反映する
+//VIDEO 3, 4 (screen_big) のときは1文字をmagxmag文字に複製して拡大表示する
+void vram_to_tvram_all(bool visible_cursor) {
+    //PCG (0xE0-0xFF) をフォントRAMへ反映 (POKE #700-#7FF対応)
+    memcpy(ntsc_fontram + 0xE0 * 8, screen_pcg, SIZE_PCG * 8);
+
+    //カーソルは属性ビット (IJ_ATTR_CURSOR) で描画側に伝える
+    //フォントスロット0xFFをカーソルに使うとPCG文字 (0xE0-0xFF) と衝突しゴースト文字が出るため、
+    //TVRAMには本来の文字コードを書き、描画時にマスクXORする (DVIと同じ方式)
+    ntsc_cursor_mask = key_flg.insert ? 0xff : 0xf0;
+    int cursor_pos = -1;
+    if (((frames >> 4) & 1) && visible_cursor && _g.cursory >= 0 && _g.cursorx < SCREEN_W && _g.cursory < SCREEN_H) {
+        cursor_pos = _g.cursory * SCREEN_W + _g.cursorx;
+    }
+
+    uint8 attr = _g.screen_invert ? IJ_ATTR_INVERT : 0;
+    int mag = 1 << _g.screen_big;
+    ntsc_mag = mag;//NTSC描画側に拡大倍率を伝える (複製セルを拡大グリフの断片として描画する)
+    for (int y = 0; y < SCREEN_H; y++) {
+        for (int x = 0; x < SCREEN_W; x++) {
+            uint8 c = vram[y * SCREEN_W + x];
+            uint8 cellattr = attr | (y * SCREEN_W + x == cursor_pos ? IJ_ATTR_CURSOR : 0);
+            uint8* tvram_dst = TVRAM + y * mag * IJ_WIDTH + x * mag;
+            uint8* attr_dst = TVRAM + IJ_ATTROFFSET + y * mag * IJ_WIDTH + x * mag;
+            for (int j = 0; j < mag; j++) {
+                for (int k = 0; k < mag; k++) {
+                    tvram_dst[j * IJ_WIDTH + k] = c;
+                    attr_dst[j * IJ_WIDTH + k] = cellattr;
+                }
+            }
+        }
+    }
+}
+
+//NTSCビデオ出力を初期化し開始する (クロックはNTSC_CLOCK_KHZ設定済みのこと)
+void ntsc_init() {
+    ntsc_fg.canary1 = 0xC0DE6001;//診断用カナリア
+    ntsc_fg.canary2 = 0xC0DE6002;
+    //IchigoJamのフォントをフォントRAMへ先にコピーしておく (0xE0-0xFFは毎フレームscreen_pcgから反映される)
+    memcpy(ntsc_fontram, CHAR_PATTERN, 256 * 8);
+    Fontp = ntsc_fontram;
+    rp2040_pwm_ntsc_init(NTSC_PIN);
+    ntsc_set_line_callback(ntsc_line_callback);
+    //IJTEXTモードへ直接設定する (set_videomodeだとstop/start_compositeが走り同期が乱れるため)
+    videomode = VMODE_IJTEXT;
+    twidth = IJ_WIDTH;
+    twidthy = IJ_ROWS;
+    attroffset = IJ_ATTROFFSET;
+    ntsc_mag = 1 << _g.screen_big;//VIDEOコマンドの拡大設定を引き継ぐ
+    clearscreen();
+}
+
+//flashの設定セクタからビデオモードを読み込む ([0]はKBD用、[1]をビデオモードに使用)
+uint8_t get_video_mode_config() {
+    uint8_t mode = get_flash(get_config_offset())[1];
+    return mode <= VIDEO_MODE_TFT ? mode : VIDEO_MODE_DVI;
+}
+
+//ビデオモードをflashの設定セクタへ保存する
+void save_video_mode_config(uint8_t mode) {
+    uint32_t offset = get_config_offset();
+    memcpy(tflash, get_flash(offset), FLASH_SECTOR_SIZE);
+    tflash[1] = mode;
+    if (video_output_mode == VIDEO_MODE_DVI) {
+        //DVIは書込中に映像を維持できないため、停止/再開する (停止状態だったら再開しない)
+        bool active = video_active();
+        video_off(0);
+        int save = save_and_disable_interrupts();
+        flash_range_erase(offset, FLASH_SECTOR_SIZE);
+        flash_range_program(offset, tflash, FLASH_SECTOR_SIZE);
+        if (active) {
+            video_on();
+        }
+        restore_interrupts(save);
+    } else {
+        //NTSCは映像を止めずに書き込む (DMAチェーンはSRAMだけで動くので、割り込み禁止中も同期信号は保たれ、
+        //画面は書込中一時フリーズするだけ)。TFTも同様 (SPIはタイマー割り込み駆動のため書込中は更新が止まるだけ)
+        int save = save_and_disable_interrupts();
+        flash_range_erase(offset, FLASH_SECTOR_SIZE);
+        flash_range_program(offset, tflash, FLASH_SECTOR_SIZE);
+        restore_interrupts(save);
+        if (video_output_mode == VIDEO_MODE_NTSC) {
+            //長い割り込み禁止で走査線カウンタが表示位置からずれたので、位相を合わせ直す
+            ntsc_release();
+            ntsc_init();
+        }
+    }
+}
+
+//DVI/core1が初期化済みか (NTSC/TFTモードで起動したときはSWITCH 0のときまで初期化されない)
+static bool dvi_initialized = false;
+void picodvi_init();//後ろで定義
+
+//SWITCHコマンドでDVI(HDMI)/NTSC(コンポジット)/TFT(ILI9341)を切り替える
+//NTSCは専用クロック (157.5MHz)、DVI/TFTは同一クロック (252MHz) なのでTFT⇔DVIはクロック変更不要
+//NTSCとの切替では両システムの停止/再開と、クロック依存の周辺 (UART/PWM/SPI) の再設定を行う
+void video_switch_mode(uint8_t mode) {
+    bool active = video_active();
+    //現在のモードを停止する (core1はDVIのキュー待ちでアイドルになる)
+    int save = save_and_disable_interrupts();
+    if (video_output_mode == VIDEO_MODE_NTSC) {
+        ntsc_release();
+    } else if (video_output_mode == VIDEO_MODE_TFT) {
+        tft_stop();
+    } else {
+        dvi_stop(&dvi0);
+    }
+    if (mode == VIDEO_MODE_NTSC) {
+        set_sys_clock_khz(NTSC_CLOCK_KHZ, true);
+    } else {
+        set_sys_clock_khz(DVI_TIMING.bit_clk_khz, true);
+    }
+    restore_interrupts(save);//割り込み禁止区間は最小にする (NTSCの走査線更新が遅れるため)
+    set_uart_bps();
+    io_reconfig_pwm();
+    sd_reconfig_spi();//SD使用中ならSPI1のbaudを新しいクロックに合わせ直す
+    video_output_mode = mode;
+    if (mode == VIDEO_MODE_NTSC) {
+        ntsc_init();
+    } else if (mode == VIDEO_MODE_TFT) {
+        tft_start();
+    } else {
+        if (dvi_initialized) {
+            dvi_start(&dvi0);//core1の割込み・キュー待ちは生きているので即再開する
+        } else {
+            picodvi_init();//NTSC/TFTモードで起動したときはDVIもcore1も未初期化なのでここで初期化する
+        }
+    }
+    save_video_mode_config(mode);
+    if (!active) {
+        video_off(0);//切替前に映像停止状態だったら停止を維持
+    }
+}
+
 //SWITCHコマンドの実体 (basic.hのcommand_lcdから呼ばれる)
-//Waveshare RP2350-PiZeroはDVI (HDMI) 出力専用のため何もしない (NTSCは将来フェーズで対応予定)
+//SWITCH 0:DVI(HDMI)、SWITCH 1:NTSC(コンポジット)、SWITCH 2:TFT(ILI9341)、SWITCH (引数なし): 次のモードへ
 void IJB_lcd(uint mode) {
-    (void)mode;
+    if (mode > VIDEO_MODE_TFT) {
+        mode = VIDEO_MODE_DVI;
+    }
+    _g.display_mode = mode;
+    if ((uint8)mode == video_output_mode) {
+        return;
+    }
+    video_switch_mode(mode);
 }
 
 //hid_app.cが複雑になってるので、もっと簡潔に処理できるなら直したい
@@ -144,12 +301,56 @@ bool timer(repeating_timer_t* rt) {
     psg_tick();
     set_tone();
     if (video_active()) {
-        vram_to_framebuf_all(_g.cursorflg);
+        if (video_output_mode == VIDEO_MODE_NTSC) {
+            //NTSC整合性チェック (診断用): メモリ破壊を検知したらエラー番号を画面に表示し、以降の通常画面更新を止める
+            uint32_t err = 0;
+            if (Fontp != ntsc_fontram) err |= 1;//フォントポインタ破壊
+            if (vram != (uint8*)RAM_VRAM) err |= 2;//VRAMポインタ破壊
+            if (videomode != VMODE_IJTEXT) err |= 4;//ビデオモード破壊
+            if (ntsc_fg.canary1 != 0xC0DE6001 || ntsc_fg.canary2 != 0xC0DE6002) err |= 8;//フォントRAM境界破壊
+            if (ntsc_dma_buf.canary1 != 0xD1A6B001 || ntsc_dma_buf.canary2 != 0xD1A6B002) err |= 16;//DMAバッファ境界破壊
+            if (ntsc_scanline() >= NUM_LINES) err |= 32;//走査線カウンタ破壊
+            if (ntsc_mag != 1 && ntsc_mag != 2 && ntsc_mag != 4 && ntsc_mag != 8) err |= 64;//拡大倍率破壊
+            if (err && !ntsc_diag_error) {
+                ntsc_diag_error = err;
+                ntsc_diag_frames = frames;
+            }
+            if (ntsc_diag_error) {
+                //TVRAMへ直接エラー番号を書く (VRAM経由でないのでVRAMが壊れていても表示される)
+                clearscreen();
+                uint8* p = TVRAM;
+                *p++ = 'E';
+                *p++ = '0' + ntsc_diag_error / 10;
+                *p++ = '0' + ntsc_diag_error % 10;
+                *p++ = ' ';
+                *p++ = 'F';
+                uint32 f = ntsc_diag_frames % 1000;
+                *p++ = '0' + f / 100;
+                *p++ = '0' + (f / 10) % 10;
+                *p++ = '0' + f % 10;
+            } else {
+                vram_to_tvram_all(_g.cursorflg);
+            }
+        } else if (video_output_mode == VIDEO_MODE_TFT) {
+            //TFTは差分更新 (SDがSPI1使用中はスキップ)、走査線カウンタは1フレーム240ラインとする
+            tft_update(_g.cursorflg);
+            _g.linecnt += FRAME_MAX_HEIGHT;
+        } else {
+            vram_to_framebuf_all(_g.cursorflg);
+        }
     }
     //中でsleep_ms()が呼ばれたときに止まるので、本来タイマーの中でtuh_task()を呼び出してはいけないが、なぜかPicoDVIを動かしていると止まらない
     //pico-sdk/lib/tinyusb/src/osal/osal_pico.h　のosal_task_delay()のsleepをwhileループに置き換えるとPicoDVIなしで一応解決する
     tuh_task();
     putc_long_press_key();
+    //LEDの診断表示 (NTSCモード): 通常は約1Hzで点滅、メモリ破壊検知時は高速点滅、点滅が止まっていたらcore0が固まっている
+    if (video_output_mode == VIDEO_MODE_NTSC) {
+        if (ntsc_diag_error) {
+            if ((frames & 7) == 0) gpio_xor_mask(1u << PICO_LED_PIN);
+        } else if ((frames & 31) == 0) {
+            gpio_xor_mask(1u << PICO_LED_PIN);
+        }
+    }
     return true;
 }
 
@@ -193,10 +394,18 @@ void pico_init() {
     static repeating_timer_t out;
     board_init();
 
+    //flashに保存されたビデオモードで起動する (SWITCHで最後に選択したモード)
+    video_output_mode = get_video_mode_config();
+    _g.display_mode = video_output_mode;
+
     vreg_set_voltage(VREG_VSEL);
     sleep_ms(10);//電圧が安定してからクロックを上げる (mlorenzatiのhello_dviデモと同じ)
-    // Run system at TMDS bit clock (DVI)
-    set_sys_clock_khz(DVI_TIMING.bit_clk_khz, true);
+    // Run system at TMDS bit clock (DVI/TFT) or NTSC clock
+    if (video_output_mode == VIDEO_MODE_NTSC) {
+        set_sys_clock_khz(NTSC_CLOCK_KHZ, true);
+    } else {
+        set_sys_clock_khz(DVI_TIMING.bit_clk_khz, true);
+    }
 
     stdio_uart_init();//クロックを変えてから初期化する
     // uart_set_hw_flow(UART_ID, false, false);//いる？
@@ -241,11 +450,18 @@ void picodvi_init() {
     }
 
     multicore_launch_core1(core1_main);
+    dvi_initialized = true;
 }
 
-//起動時にビデオ出力を初期化する (main()から呼ばれる)
+//起動時に、保存されたモードでビデオ出力を初期化する (main()から呼ばれる)
 void video_output_init() {
-    picodvi_init();
+    if (video_output_mode == VIDEO_MODE_NTSC) {
+        ntsc_init();
+    } else if (video_output_mode == VIDEO_MODE_TFT) {
+        tft_start();
+    } else {
+        picodvi_init();
+    }
 }
 
 void ichigojam_init() {

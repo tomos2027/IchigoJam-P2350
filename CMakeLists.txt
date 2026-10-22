@@ -29,12 +29,14 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/PicoDVI/software/libsprite libsprite)
 
 add_executable(IchigoJam_P2350
 	src/main.c
+	src/ntsc/rp2040_pwm_ntsc_textgraph.c
 )
 
 target_include_directories(IchigoJam_P2350 PUBLIC
 	${CMAKE_CURRENT_LIST_DIR}
 	# Make sure TinyUSB can find tusb_config.h
 	${CMAKE_CURRENT_LIST_DIR}/src
+	${CMAKE_CURRENT_LIST_DIR}/src/ntsc
 )
 
 # pico-sdk pico-extras PicoDVIはリポジトリ直下にcloneして使う (README参照)

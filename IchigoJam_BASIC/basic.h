@@ -3421,7 +3421,7 @@ S_INLINE void command_at() {
 }
 
 S_INLINE void command_lcd() { // 1.2b32, 1.3.2b12 contrast 292->248 +44byte
-	uint n = !_g.display_mode;
+	uint n = _g.display_mode >= 2 ? 0 : _g.display_mode + 1;//引数なし: DVI→NTSC→TFT→DVIの順でトグル (実体はIJB_lcdで処理)
 	int code = token_getCode(); // ELSE対策 1.2b61
 	token_back();
 	if (code != TOKEN_NULL && code != TOKEN_ELSE) {

@@ -33,7 +33,8 @@
 #include "common_dvi_pin_configs.h"
 #include "sprite.h"
 
-//NTSCコンポジット出力 (rp2040_pwm_ntsc_textgraph) は将来フェーズで対応予定
+//NTSCコンポジット出力 (KenKen氏rp2040_pwm_ntsc_textgraphのRP2350移植、src/ntsc/)
+#include "ntsc/rp2040_pwm_ntsc_textgraph.h"
 
 #include "tusb.h"
 #include "hid.h"
@@ -57,6 +58,7 @@
 //---
 #include "i2c.h"
 #include "i2ceeprom.h"
+#include "tft.h"//TFT (ILI9341) ドライバ、display.hより先 (video_on/off/activeが参照するため)
 #include "display.h"//storage.h/keyboard.hがvideo_active等を使うため、それより先にincludeする
 #include "storage.h"
 #include "keyboard.h"

@@ -39,7 +39,7 @@
 #define SD_HZ 1000000         // 通常転送
 #define SD_FALLBACK_HZ 100000  // 読み取りエラー時のフォールバック先
 
-static bool sd_pins_reserved = false;
+static volatile bool sd_pins_reserved = false;//TFTドライバ (割り込みコンテキスト) からも参照するためvolatile
 static bool sd_initialized = false;
 static bool sd_fat_ready = false;
 static bool sd_files_index_ready = false;
@@ -108,6 +108,14 @@ static void sd_card_off(void) {
     gpio_init(SD_CLK_PIN);
     gpio_init(SD_MOSI_PIN);
     sd_initialized = false; sd_fat_ready = false; sd_files_index_ready = false; sd_pins_reserved = false; sd_block_addressed = false;
+}
+
+//クロック切替 (DVI 252MHz⇔NTSC 157.5MHz) の後に呼ぶ: SDがSPI1使用中ならbaudを再設定する
+//(SPIのbaudはclk_peri由来のため、システムクロックが変わると実際の通信速度が変わってしまう)
+static void sd_reconfig_spi() {
+    if (sd_pins_reserved) {
+        spi_set_baudrate(spi1, sd_read_hz);
+    }
 }
 
 // SD_INIT_HZで初期化し、成功したらSD_HZへ上げる。エラー：1未挿入、2 CMD0、3 CMD8、4 ACMD41、5 OCR、6 CMD16。

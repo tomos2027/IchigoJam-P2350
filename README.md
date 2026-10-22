@@ -4,7 +4,7 @@
 
 A port of **IchigoJam BASIC 1.6.1 (4K version)** for the **Waveshare RP2350-PiZero** (RP2350B) board.
 
-- Video output: **DVI (mini HDMI)**, 640x480p60 (RP2350 SIO built-in TMDS encoders + PIO serializer)
+- Video output: **3 switchable modes (`SWITCH` command)** — **DVI (mini HDMI)** 640x480p60 / **NTSC composite** (GP19 + 75ohm + 560pF external circuit) / **TFT LCD (ILI9341)** (5 unused pins, SPI)
 - Keyboard: connect a USB keyboard directly to the Type-C port (native USB host)
 - **SD card**: uses the on-board TF slot (slots 200-299 / `P200.IJB`..., plus **ASCII format** `SAVE n,1` → `Pnnn.BAS` for PC interchange)
 - Program storage: 100 internal flash slots (0-99) / external EEPROM (100-131) / SD card (200-299)
@@ -40,7 +40,8 @@ cmake --build build
 | BASIC | IchigoJam BASIC 1.6.1 (4K version, arrays [0..357]) |
 | `VER()` | 16130 |
 | `VER(1)` (platform) | 9 (RP2350) |
-| Clock | 252 MHz (DVI TMDS bit clock, VREG 1.20V) |
+| Clock | DVI/TFT: 252 MHz, NTSC: 157.5 MHz (both overclocked, VREG 1.20V) |
+| Video output | `SWITCH` command selects 0:DVI (HDMI) / 1:NTSC composite (GP19) / 2:TFT ILI9341 (GP12-16), persisted to flash |
 | Internal storage | 100 slots at the end of flash (4096 bytes each) |
 | SD format | FAT32 (MBR/superfloppy), 8.3 names, root only |
 
@@ -49,6 +50,7 @@ cmake --build build
 - 4K extensions (4096-byte program area, `IR.IN`, `ENV.IN`, etc.) based on [GivetakeJam_P](https://github.com/Canon-boy4/ichigojam-firm) (MIT license)
 - SD card driver (`src/sd_card.h`) is an adapted version of Canon-boy4's GivetakeJam_P (rp2350-16130, MIT license)
 - PicoDVI (mlorenzati fork / originally Wren6991 PicoDVI) follows each repository's license
+- NTSC output (`src/ntsc/`) is a work by KenKen (`rp2040_pwm_ntsc_textgraph`, free for non-commercial use, attribution recommended)
 
 ## Trademark
 - IchigoJam is a registered trademark of jig.jp co., ltd.
