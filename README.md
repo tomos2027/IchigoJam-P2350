@@ -4,7 +4,7 @@
 
 A port of **IchigoJam BASIC 1.6.1 (4K version)** for the **Waveshare RP2350-PiZero** (RP2350B) board.
 
-- Video output: **3 switchable modes (`SWITCH` command)** — **DVI (mini HDMI)** 640x480p60 / **NTSC composite** (GP19 + 75ohm + 560pF external circuit) / **TFT LCD (ILI9341)** (5 unused pins, SPI)
+- Video output: **3 switchable modes (`SWITCH` command)** — **DVI (mini HDMI)** 640x480p60 / **NTSC composite** (GP3 + 75ohm + 560pF external circuit) / **TFT LCD (ILI9341)** (5 unused pins, SPI)
 - Keyboard: connect a USB keyboard directly to the Type-C port (native USB host)
 - **SD card**: uses the on-board TF slot (slots 200-299 / `P200.IJB`..., plus **ASCII format** `SAVE n,1` → `Pnnn.BAS` for PC interchange)
 - Program storage: 100 internal flash slots (0-99) / external EEPROM (100-131) / SD card (200-299)
@@ -34,6 +34,8 @@ cmake -B build -DPICO_SDK_PATH=/path/to/pico-sdk -DPICO_EXTRAS_PATH=/path/to/pic
 cmake --build build
 ```
 
+With Docker (BuildKit), everything — cloning the pinned dependencies, applying both patches and building — runs inside the image: `docker build -o out .` exports `out/IchigoJam_P2350.uf2`.
+
 ## Specifications
 | Item | Value |
 |---|---|
@@ -41,7 +43,7 @@ cmake --build build
 | `VER()` | 16130 |
 | `VER(1)` (platform) | 9 (RP2350) |
 | Clock | DVI/TFT: 252 MHz, NTSC: 157.5 MHz (both overclocked, VREG 1.20V) |
-| Video output | `SWITCH` command selects 0:DVI (HDMI) / 1:NTSC composite (GP19) / 2:TFT ILI9341 (GP12-16), persisted to flash |
+| Video output | `SWITCH` command selects 0:DVI (HDMI) / 1:NTSC composite (GP3) / 2:TFT ILI9341 (GP12-16), persisted to flash |
 | Internal storage | 100 slots at the end of flash (4096 bytes each) |
 | SD format | FAT32 (MBR/superfloppy), 8.3 names, root only |
 

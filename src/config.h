@@ -25,9 +25,9 @@
 #define ENABLE_I2C_BPS
 
 //映像出力: DVI (HDMI) / NTSCコンポジット / TFT液晶 (ILI9341) の3モード (SWITCHコマンドで切替)
-//NTSC出力ピン: IchigoJam_PはGP3だが、本基板のGP3はI2C1 SCLで使用中のため未使用ピンのGP19とする
-//(KenKen氏ライブラリのデモと同じピン。75Ω+560pFの外部回路を介してテレビ等の映像入力へ接続)
-#define NTSC_PIN 19
+//NTSC出力ピン: IchigoJam_Pと同一のGP3 (I2CをGP4/5に揃えたためGP3は未使用に戻った)
+//(75Ω+560pFの外部回路を介してテレビ等の映像入力へ接続)
+#define NTSC_PIN 3
 #define NTSC_CLOCK_KHZ 157500//NTSC動作時のシステムクロック (157.5MHz/11=14.318181MHzでサンプリング、色副搬送波の4倍)
 
 //4K版: 1プログラム4096バイト化に伴い保存本数を100→25に (1本=フラッシュ1セクタ4096バイト、GivetakeJam_P準拠)

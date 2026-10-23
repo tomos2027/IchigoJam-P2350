@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.13)
 
 # Waveshare RP2350-PiZero (RP2350B / 16MB flash / DVI on GPIO32-39)
 # pico-sdk 2.3.1以降に同梱のボード定義を使用する
-# (UART1=GP4/5, I2C1=GP2/3, RP2350B=GPIO48本, PICO_PIO_USE_GPIO_BASEは自動有効)
+# (RP2350B=GPIO48本, PICO_PIO_USE_GPIO_BASEは自動有効)
+# ボードデフォルトのUART1=GP4/5・I2C1=GP2/3から、IchigoJam P (RP2040版) と同一のGPIO番号
+# (UART0=GP0/1, I2C0=GP4/5) に揃える (下のtarget_compile_definitionsで上書き)
 # 注意: pico_sdk_import.cmakeはincludeした時点でボード/プラットフォームを確定させるため、
 # このsetはincludeより前に置く必要がある (コマンドラインの-DPICO_BOARD=...での上書きも可能)
 set(PICO_BOARD waveshare_rp2350_pizero CACHE STRING "Board type")
@@ -46,6 +48,13 @@ target_include_directories(IchigoJam_P2350 PUBLIC
 # PicoDVI/software/apps/mandelbrot/CMakeLists.txt から引用
 target_compile_definitions(IchigoJam_P2350 PRIVATE
 	DVI_DEFAULT_SERIAL_CONFIG=${DVI_DEFAULT_SERIAL_CONFIG}
+	# IchigoJam P (RP2040版) と同一のGPIO番号に揃える (stdio_uartとi2c_defaultがここに追従、i2c.h/i2ceeprom.hは無修正)
+	PICO_DEFAULT_UART=0
+	PICO_DEFAULT_UART_TX_PIN=0
+	PICO_DEFAULT_UART_RX_PIN=1
+	PICO_DEFAULT_I2C=0
+	PICO_DEFAULT_I2C_SDA_PIN=4
+	PICO_DEFAULT_I2C_SCL_PIN=5
 	# core0スタック予約を32KBに拡大 (複雑な式でスタック溢れしないように、IchigoJam_Pのmemmap拡大と同じ目的)
 	PICO_STACK_SIZE=0x8000
 	# core1 (DVIスキャンライン) のスタックはデフォルトの2KBのまま (PICO_CORE1_STACK_SIZEの省略時はPICO_STACK_SIZEに追随するため明示指定)

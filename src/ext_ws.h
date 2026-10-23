@@ -23,7 +23,7 @@ void __not_in_flash_func(wsled_send_one_signal_252) (bool bit) { //DVIモード 
 }
 
 //WS.LED port,n[,repeat] (4K版: ポート選択式+拡張配列変数対応)
-//port: 1-7 (OUT1-6、7=LED/GP17)、n: LED数、repeat: 送信回数
+//port: 1-7 (OUT1-6、7=LED/GP2)、n: LED数、repeat: 送信回数
 //色データは配列変数[0]〜[n*3-1]から読み込む (1LEDにつき3変数、[102]-[357]の拡張領域に対応し最大119LED)
 void __not_in_flash_func(ws_out) (int port, int nled, int repeat) {
     if (port < 1 || port > 7 || nled < 1 || repeat < 1) {

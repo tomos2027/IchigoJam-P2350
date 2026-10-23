@@ -4,7 +4,7 @@
 
 IchigoJam BASIC 1.6.1 (4K版) の **Waveshare RP2350-PiZero** (RP2350B) 移植です。
 
-- 映像出力: **3モード切替 (`SWITCH`コマンド)** — **DVI (mini HDMI)** 640x480p60 / **NTSCコンポジット** (GP19+75Ω+560pF外部回路) / **TFT液晶 (ILI9341)** (自由ピン5本で接続、SPI)
+- 映像出力: **3モード切替 (`SWITCH`コマンド)** — **DVI (mini HDMI)** 640x480p60 / **NTSCコンポジット** (GP3+75Ω+560pF外部回路) / **TFT液晶 (ILI9341)** (自由ピン5本で接続、SPI)
 - キーボード: Type-CポートにUSBキーボードを直接接続 (ネイティブUSBホスト)
 - **SDカード**: 基板内蔵TFスロットに対応 (スロット200-299 / `P200.IJB`〜、**アスキー形式 `SAVE n,1` → `Pnnn.BAS`** でPCとの連携可)
   - `.BAS`は**UTF-8**で保存。LOADはUTF-8 (半角カナ/全角カナ→半角カナ/全角英数→半角の自動変換、BOM対応) と旧形式の生バイトを自動判別。**漢字は非対応 (かなで記述)**
@@ -22,25 +22,27 @@ SDカード機能は [Canon-boy4氏 GivetakeJam_P](https://github.com/Canon-boy4
 
 | 機能 | GP | 物理ピン (BCM) | 機能 | GP | 物理ピン (BCM) |
 |---|---|---|---|---|---|
-| LED (診断表示兼用) | GP17 | 11 (BCM17) | OUT1 (PWM可) | GP8 | 24 (BCM8) |
+| LED (診断表示兼用) | GP2 | 3 (BCM2) | OUT1 (PWM可) | GP8 | 24 (BCM8) |
 | BTN | GP18 | 12 (BCM18) | OUT2 (PWM可) | GP9 | 32 (BCM9) |
 | IN1 | GP27 | 13 (BCM27) | OUT3 (PWM可) | GP10 | 23 (BCM11) |
 | IN2 | GP26 | 37 (BCM26) | OUT4 (PWM可) | GP11 | 19 (BCM10) |
 | IN3 | GP6 | 31 (BCM6) | OUT5 (PWM可) | GP22 | 15 (BCM22) |
 | IN4 | GP7 | 26 (BCM7) | OUT6 | GP21 | 40 (BCM21) |
-| I2C1 SDA/SCL | GP2/3 | 3/5 (BCM2/3) | SOUND | GP20 | 38 (BCM20) |
-| **NTSC映像** | **GP19** | **35 (BCM19)** | UART1 TX/RX | GP4/5 | 8/10 (BCM14/15) |
+| I2C0 SDA/SCL | GP4/5 | 8/10 (BCM14/15) | SOUND | GP20 | 38 (BCM20) |
+| **NTSC映像** | **GP3** | **5 (BCM3)** | UART0 TX/RX | GP0/1 | 27/28 (BCM0/1) |
 | **TFT SCK** | **GP14** | **7 (BCM14)** | **TFT CS** | **GP13** | **33 (BCM13)** |
 | **TFT DC** | **GP16** | **36 (BCM16)** | **TFT RESET** | **GP12** | **21 (BCM12)** |
 | **TFT MOSI** | **GP15** | **29 (BCM15)** | | | |
 
-- **NTSCコンポジット出力 (`SWITCH 1`)**: GP19 → 75Ω直列 + 560pF (GND間) → テレビ等の映像入力
+- **NTSCコンポジット出力 (`SWITCH 1`)**: GP3 → 75Ω直列 + 560pF (GND間) → テレビ等の映像入力
 - **TFT液晶 ILI9341 (`SWITCH 2`)**: SCK=GP14、MOSI=GP15、CS=GP13、DC=GP16、RESET=GP12、VCC/LEDA=3.3V、GND=GND (SDO未接続可)。未使用の「自由ピン」のみで接続し、IchigoJamのI/Oポートは消費しない。TFTモード中はSDカードとSPI1を共用するため、SD読み書き中のみ画面更新が一時停止する
 
 - WS.LEDはポート1-7 (OUT1-6＋LED)、IR.INはポート1-4 (IN1-4)
 - DVI (HDMI) =GP32-39、**SDカード (TFスロット) =GP30/31/40/43**、PIO-USB=GP28/29 — いずれもIchigoJam I/Oと独立 (同時利用可)
 - **本基板はADCピンが40ピンヘッダーに出ていません。** `ANA()`はデジタル値 (LOW=0 / HIGH=1023) を返します
-- 未割当ヘッダーGPIO (自由にPOKE可能): GP0/1、GP23-25、GP28/29位置の一部 — **GP12-16とGP19はNTSC/TFT用の映像ピン** (DVI/NTSC/TFTで使わないモードの間は自由にPOKE可)
+- 未割当ヘッダーGPIO (自由にPOKE可能): GP17、GP19、GP23-25 — **GP12-16とGP3はNTSC/TFT用の映像ピン** (DVI/NTSC/TFTで使わないモードの間は自由にPOKE可)
+
+> **GPIO番号はオリジナルIchigoJam P (RP2040版) と同一**に揃えています (POKE/USR機械語によるGPIO直接操作の互換性のため。UART0=GP0/1、I2C0=GP4/5、LED=GP2、NTSC=GP3)。ハードウェア制約による例外: **BTN=GP18** (GP28はPIO-USBポートが使用中)、**DVI=GP32-39** (mini HDMI直結、オリジナルはGP12-19)、**`ANA()`はデジタル値** (ADCピンGP40-47はヘッダー未引出し)。
 
 ## 環境構築
 
@@ -79,6 +81,17 @@ cmake --build build
 
 **注意**: `set(PICO_BOARD waveshare_rp2350_pizero)` は `pico_sdk_import.cmake` より前に置く必要があります (SDK 2.xはimport時にボードを確定させるため)。CMakeLists.txtはこの構成になっています。
 
+### Dockerでビルド
+
+Docker (BuildKit) 環境があれば、依存ライブラリのclone・パッチ適用・ビルドまで自動で実行できます:
+
+```sh
+docker build -o out .
+# → out/IchigoJam_P2350.uf2
+```
+
+依存ライブラリのバージョンはDockerfileのARGでピン留めしています (既定値は検証済みの最新版: pico-sdk 2.3.1 / pico-extras 52fd7a7 / PicoDVI 9eca921)。
+
 ## 書き込み方
 1. Type-CをPCに接続せず、**BOOTボタンを押しながらRESET** → 離すと`RPI-RP2`ドライブとして認識
 2. `IchigoJam_P2350.uf2`をドラッグ＆ドロップ
@@ -101,7 +114,7 @@ cmake --build build
 - `.BAS` (アスキー形式) はUTF-8で保存されます。UTF-8では半角カナ1文字が3バイトになるため、かな中心の長いプログラムは4096バイト制限 (エラー38) に届きやすくなります。**漢字は非対応**です (かなで記述してください)
 - 252MHzオーバークロックで動作します。フラッシュチップが非Winbond (Puya等) の場合、QEビット未設定に関する報告があります (PSRAM併用時が主因。本ファームはPSRAM非使用のため通常影響なし。万一固まる場合は`flash_config`の`FLASH_QE_SET_1.uf2`で恒久対策、ただし**2回実行は禁止**)
 - SLEEP/WAITのディープスリープはpico-extrasのsleepライブラリ (RP2350対応) を使用
-- **NTSCモード (`SWITCH 1`) はCPUが157.5MHz駆動のためBASICの実行速度がDVI/TFTモードより遅くなる** (オリジナルのIchigoJamよりは速い)。信号はGP19から出力、75Ω+560pFの回路を介して接続する。NTSCモード中はGP17のLEDが約1Hzで点滅する (高速点滅は内部異常を検知したとき)
+- **NTSCモード (`SWITCH 1`) はCPUが157.5MHz駆動のためBASICの実行速度がDVI/TFTモードより遅くなる** (オリジナルのIchigoJamよりは速い)。信号はGP3から出力、75Ω+560pFの回路を介して接続する。NTSCモード中はGP2のLEDが約1Hzで点滅する (高速点滅は内部異常を検知したとき)
 - **TFTモード (`SWITCH 2`) はILI9341 (4線SPI) 専用**。SDカードとSPI1を共用するため、SD読み書き中は画面更新が一時停止する。全画面書き換え (CLS等) は約1フレームかかる。`WAIT -n`の走査線粒度は1フレーム (240走査線) 単位になる
 - 映像モードはflashに保存され、次回起動時にそのモードで起動する (F10キーで`SWITCH`、引数なしはDVI→NTSC→TFTの順でトグル)
 

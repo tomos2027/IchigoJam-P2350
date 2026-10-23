@@ -4,8 +4,8 @@
 
 //Waveshare RP2350-PiZero 40ピンヘッダー (Pi Zero互換位置) のピン割り当て
 //ヘッダーの物理番号と BCM番号 (基板シルク表示) をコメントに併記
-#define LED 17  // 11番ピン (BCM17)   基板にLEDがないため外部LEDを推奨、診断表示 (電源ON/ハードフォルト点滅) もこのピン
-#define BTN 18  // 12番ピン (BCM18)   GNDとの間にボタンを接続 (内部プルアップ)
+#define LED 2   // 3番ピン (BCM2)   IchigoJam P (RP2040版) と同一のGPIO番号。基板にLEDがないため外部LEDを推奨、診断表示 (電源ON/ハードフォルト点滅) もこのピン
+#define BTN 18  // 12番ピン (BCM18)   GNDとの間にボタンを接続 (内部プルアップ)。IchigoJam PのBTNはGP28だが本基板ではPIO-USBポート (GP28/29) が使用中のためGP18
 #define IN1 27  // 13番ピン (BCM27)   以下IchigoJam_P (Pico) と同一のGPIO番号
 #define IN2 26  // 37番ピン (BCM26)
 #define IN3 6   // 31番ピン (BCM6)

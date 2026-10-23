@@ -8,9 +8,9 @@
 
 #define DEFAULT_UARTMODE_TXD 2	// txd 0:disable, 1:only text, 2:with ctrl, +4:echo back mode, +8:画面表示オフ(PRINTやSyntax errorなどのメッセージがオフになり、キーボード入力は表示されたまま)
 #define DEFAULT_UARTMODE_RXD 1	// rxd 0:disable, 1:enable, 2:ignore esc mode, 4:CR mode, 6:ignore esc & CR mode (auto comment mode??) // -> keyboard_ps2.h
-//Waveshare RP2350-PiZeroのUARTは40ピンヘッダーのBCM14/15位置 (GP4=TX、GP5=RX、uart1)
-#define UART_ID uart1
-#define UART_IRQ UART1_IRQ
+//IchigoJam Pと同一のUART0 (GP0=TX、GP1=RX、40ピンヘッダー27/28番ピン)
+#define UART_ID uart0
+#define UART_IRQ UART0_IRQ
 #define UART_DEFAULT_BPS 115200
 
 volatile static char* keybuf = (char*)(ram + (OFFSET_RAM_KEYBUF + 1));

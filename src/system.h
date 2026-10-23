@@ -2,8 +2,8 @@
 #define __SYSTEM_H__
 #include "all_includes.h"
 
-//基板にLEDがないため、LEDポート (GP17、40ピンヘッダー11番ピン) を診断表示に兼用する
-#define PICO_LED_PIN 17
+//基板にLEDがないため、LEDポート (GP2、40ピンヘッダー3番ピン。IchigoJam Pと同一のGPIO番号) を診断表示に兼用する
+#define PICO_LED_PIN 2
 
 //ウォッチドッグ: core0が固まったらこの秒数後に自動再起動する (電源抜き差しでハングした場合の自動復帰)
 //timer()内でwatchdog_update()を呼んで生きていることを伝える

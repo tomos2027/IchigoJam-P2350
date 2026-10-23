@@ -15,9 +15,9 @@
 #define MARGIN_WIDTH ((FRAME_MAX_WIDTH - CHAR_MAX_COLS * FONT_SIZE) / 2)
 #define MARGIN_HEIGHT ((FRAME_MAX_HEIGHT - CHAR_MAX_ROWS * FONT_SIZE) / 2)
 
-//40ピンヘッダーのUART位置 (BCM14/15位置、GP4=TX、GP5=RX) ※keyboard.hのUART_ID (uart1) と対
-#define UART_TX_PIN 4
-#define UART_RX_PIN 5
+//IchigoJam Pと同一のUART0ピン (GP0=TX、GP1=RX、40ピンヘッダー27/28番ピン) ※keyboard.hのUART_ID (uart0) と対
+#define UART_TX_PIN 0
+#define UART_RX_PIN 1
 
 //pico
 static uint16_t framebuf[FRAME_MAX_WIDTH * FRAME_MAX_HEIGHT];
