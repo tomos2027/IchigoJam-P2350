@@ -4,10 +4,12 @@
 #define __EXT_WS_H__
 #include "all_includes.h"
 
-//1クロックの時間は動作モードにより異なる (DVI:252MHz=約4ns)
-//100nsあたりのNOP数: 252MHz→25個
+//1クロックの時間は動作モードにより異なる (DVI/TFT:252MHz=約4ns、NTSC:157.5MHz=約6.3ns)
+//100nsあたりのNOP数: 252MHz→25個、157.5MHz→16個
 #define NOP5_252 __asm("nop");__asm("nop");__asm("nop");__asm("nop");__asm("nop");
+#define NOP4_1575 __asm("nop");__asm("nop");__asm("nop");__asm("nop");
 #define SLEEP_100NS_DVI NOP5_252 NOP5_252 NOP5_252 NOP5_252 NOP5_252 //25 nop=約100ns (252MHz)
+#define SLEEP_100NS_NTSC NOP4_1575 NOP4_1575 NOP4_1575 NOP4_1575 //16 nop=約102ns (157.5MHz)
 
 static uint8 ws_pin;
 
@@ -20,6 +22,16 @@ void __not_in_flash_func(wsled_send_one_signal_252) (bool bit) { //DVIモード 
     SLEEP_100NS_DVI SLEEP_100NS_DVI SLEEP_100NS_DVI
     gpio_put(ws_pin, false);
     SLEEP_100NS_DVI SLEEP_100NS_DVI SLEEP_100NS_DVI SLEEP_100NS_DVI SLEEP_100NS_DVI SLEEP_100NS_DVI
+}
+
+void __not_in_flash_func(wsled_send_one_signal_1575) (bool bit) { //NTSCモード (157.5MHz)
+    gpio_put(ws_pin, true);
+    if (bit) {
+        SLEEP_100NS_NTSC SLEEP_100NS_NTSC SLEEP_100NS_NTSC
+    }
+    SLEEP_100NS_NTSC SLEEP_100NS_NTSC SLEEP_100NS_NTSC
+    gpio_put(ws_pin, false);
+    SLEEP_100NS_NTSC SLEEP_100NS_NTSC SLEEP_100NS_NTSC SLEEP_100NS_NTSC SLEEP_100NS_NTSC SLEEP_100NS_NTSC
 }
 
 //WS.LED port,n[,repeat] (4K版: ポート選択式+拡張配列変数対応)
@@ -37,13 +49,18 @@ void __not_in_flash_func(ws_out) (int port, int nled, int repeat) {
     gpio_set_dir(ws_pin, GPIO_OUT);
     gpio_put(ws_pin, false);
     sleep_us(300); //リセット信号
+    bool is_ntsc = (video_output_mode == VIDEO_MODE_NTSC);
     int save = save_and_disable_interrupts();
     for (int i = 0; i < repeat; i++) {
         for (int j = 0; j < nled * 3; j++) {//1つのLEDにつき、3つの変数が必要
             uint16 v = *basic_getArrayPtr(j); //拡張配列変数対応 (4K版)
             for (int k = 7; k >= 0; k--) {
                 bool bit = v & (0x01 << k);
-                wsled_send_one_signal_252(bit);
+                if (is_ntsc) {
+                    wsled_send_one_signal_1575(bit);
+                } else {
+                    wsled_send_one_signal_252(bit);
+                }
             }
         }
     }
