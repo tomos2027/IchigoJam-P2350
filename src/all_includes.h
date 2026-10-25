@@ -30,6 +30,7 @@
 
 //PicoDVI
 #include "dvi.h"
+#include "tmds_encode.h"
 #include "common_dvi_pin_configs.h"
 #include "sprite.h"
 
@@ -39,7 +40,8 @@
 #include "tusb.h"
 #include "hid.h"
 
-#define DVI_TIMING dvi_timing_640x480p_60hz
+//TV互換のCEA-861 720x480p60 (480p)。640x480p60 (VGA) はTVが認識しないことがある
+#define DVI_TIMING dvi_timing_720x480p_60hz
 
 // for IchigoJam BASIC
 #define NO_MEMCPY

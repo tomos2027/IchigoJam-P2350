@@ -17,7 +17,7 @@
 #define TFT_PIN_CS 13
 #define TFT_PIN_DC 16
 #define TFT_PIN_RESET 12
-//SPIクロック: 252MHz/8=31.5MHz (ILI9341の規格値は10MHzだが大半のモジュールは動作する。
+//SPIクロック: 31.5MHzを要求 (270MHzからは27MHzに分周される。ILI9341の規格値は10MHzだが大半のモジュールは動作する。
 //表示が化ける・白画面のままの場合は15.75MHzに落とす)
 #define TFT_SPI_BAUD 31500000
 //#define TFT_SPI_BAUD 15750000
@@ -82,7 +82,7 @@ static void tft_set_window(int x0, int y0, int x1, int y1) {
     tft_write_cmd(0x2C);//RAMWR
 }
 
-//全画面黒クリア (320x240x16bpp、31.5MHzで約39ms)
+//全画面黒クリア (320x240x16bpp、27MHzで約45ms)
 static void tft_fill_black() {
     static uint8_t zeros[512];//0初期化 (RGB565の黒=0x0000)
     tft_cs(true);

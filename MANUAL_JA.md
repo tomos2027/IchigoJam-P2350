@@ -142,9 +142,11 @@ SWITCH      … DVI→NTSC→TFTの順でトグル (F10キーと同じ)
 
 | モード | 必要なもの | 特徴 |
 |---|---|---|
-| **DVI (SWITCH 0)** | mini HDMI→HDMIケーブル+DVI互換モニタ | 最速 (252MHz)。640x480p60 |
+| **DVI (SWITCH 0)** | mini HDMI→HDMIケーブル+DVI互換モニタ | 最速 (270MHz)。720x480p60 (480p、TV互換) |
 | **NTSC (SWITCH 1)** | 下記の回路+テレビ等の映像入力 (黄色いビデオ端子) | CPUが157.5MHz駆動のためBASICはやや遅い。モード中はGP2のLEDが約1Hzで点滅 (動作表示) |
-| **TFT (SWITCH 2)** | ILI9341搭載TFT液晶モジュール (4線SPI、2.2〜3.2インチ推奨) | 252MHzのまま動作。ポータブル構成に最適 |
+| **TFT (SWITCH 2)** | ILI9341搭載TFT液晶モジュール (4線SPI、2.2〜3.2インチ推奨) | 270MHzのまま動作。ポータブル構成に最適 |
+
+DVIの720x480を4:3で表示したときに文字の縦横比が従来の640x480と同じになるよう、文字は横方向に9/4倍して表示します。TV側の画面モードは「4:3」に設定してください (16:9のTVでは4:3表示)。
 
 **NTSC接続回路 (GP3 → 映像入力)**:
 
@@ -358,8 +360,8 @@ Docker (BuildKit) 環境の場合は、依存ライブラリのclone・パッチ
 |---|---|
 | BASIC | IchigoJam BASIC 1.6.1 (4K版、GivetakeJam_P準拠の拡張: プログラム4096バイト、配列[0]〜[357]、`WS.LED`、`IR.IN`、`ENV.IN`) |
 | `VER()` / `VER(1)` | 16130 / 9 |
-| CPUクロック | DVI/TFTモード: 252MHz、NTSCモード: 157.5MHz |
-| 映像 | `SWITCH`で3モード切替 — DVI 640x480p60 / NTSCコンポジット (GP3) / TFT ILI9341 (GP12-16)。いずれも32×24文字 |
+| CPUクロック | DVI/TFTモード: 270MHz、NTSCモード: 157.5MHz |
+| 映像 | `SWITCH`で3モード切替 — DVI 720x480p60 (480p) / NTSCコンポジット (GP3) / TFT ILI9341 (GP12-16)。いずれも32×24文字 |
 | 入力 | USBキーボード (Type-C、ネイティブUSBホスト)、UART、IN1-4/BTN |
 | 音声 | PWM 1ch (BEEP/SOUND/PLAY) |
 | 保存 | 内蔵フラッシュ100本 + EEPROM 32本 + SD 100本 |

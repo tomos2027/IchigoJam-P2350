@@ -3,16 +3,21 @@
 #include "all_includes.h"
 
 //Waveshare RP2350-PiZero (RP2350B)
-// TMDS bit clock 252 MHz (オーバークロック、VREG 1.20V)
-//320*240ピクセルの画面として扱う
-#define FRAME_MAX_WIDTH 320
+// TMDS bit clock 270 MHz (CEA-861 720x480p60、VREG 1.20V)
+//720*240ピクセル (2bpp、白=0b11/黒=0b00) の画面として扱う
+#define FRAME_MAX_WIDTH 720
 #define FRAME_MAX_HEIGHT 240
+#define FRAME_BYTES_PER_LINE (FRAME_MAX_WIDTH * 2 / 8)
 #define VREG_VSEL VREG_VOLTAGE_1_20
 #define SCANLINE_INIT 2
 
 //IchigoJam
 #define FONT_SIZE 8
-#define MARGIN_WIDTH ((FRAME_MAX_WIDTH - CHAR_MAX_COLS * FONT_SIZE) / 2)
+//文字は256x192を横9/4に補正して576x192にする
+//(720x480は4:3表示時に画素が横長でないため、9/4補正で640x480時と同じ縦横比になる)
+#define TEXT_WIDTH (CHAR_MAX_COLS * FONT_SIZE)
+#define TEXT_SCALED_WIDTH (TEXT_WIDTH * 9 / 4)
+#define MARGIN_WIDTH ((FRAME_MAX_WIDTH - TEXT_SCALED_WIDTH) / 2)
 #define MARGIN_HEIGHT ((FRAME_MAX_HEIGHT - CHAR_MAX_ROWS * FONT_SIZE) / 2)
 
 //IchigoJam Pと同一のUART0ピン (GP0=TX、GP1=RX、40ピンヘッダー27/28番ピン) ※keyboard.hのUART_ID (uart0) と対
@@ -20,31 +25,47 @@
 #define UART_RX_PIN 1
 
 //pico
-static uint16_t framebuf[FRAME_MAX_WIDTH * FRAME_MAX_HEIGHT];
+//2bpp (グレースケール) フレームバッファ。白=0b11、黒=0b00
+static uint8_t framebuf[FRAME_BYTES_PER_LINE * FRAME_MAX_HEIGHT] __attribute__((aligned(4)));
+static uint8_t text_line[TEXT_WIDTH / 8];//1走査線分の文字データ (1bpp、横9/4補正前)
+
+//4ピクセル(4bit)を9ピクセル(18bit)へ横9/4拡大するための表
+//各ピクセルは2bpp (白=0b11、黒=0b00)、幅は3,2,2,2ピクセル
+static const uint32_t expand9_2bpp[16] = {
+    0x00000, 0x0003f, 0x003c0, 0x003ff, 0x03c00, 0x03c3f, 0x03fc0, 0x03fff,
+    0x3c000, 0x3c03f, 0x3c3c0, 0x3c3ff, 0x3fc00, 0x3fc3f, 0x3ffc0, 0x3ffff
+};
 
 void core1_main() {
     dvi_register_irqs_this_core(&dvi0, DMA_IRQ_0);
     dvi_start(&dvi0);
-    dvi_scanbuf_main_16bpp(&dvi0);
-    __builtin_unreachable();
+    while (true) {
+        uint32_t* scanbuf;
+        queue_remove_blocking_u32(&dvi0.q_colour_valid, &scanbuf);
+        uint32_t* tmdsbuf;
+        queue_remove_blocking_u32(&dvi0.q_tmds_free, &tmdsbuf);
+        tmds_encode_2bpp(scanbuf, tmdsbuf, FRAME_MAX_WIDTH);
+        queue_add_blocking_u32(&dvi0.q_tmds_valid, &tmdsbuf);
+        queue_add_blocking_u32(&dvi0.q_colour_free, &scanbuf);
+    }
 }
 
 //この関数の実行時間が長くなるとUSBキーボードを使う時、不具合が起こる
 void core1_scanline_callback() {
     // Discard any scanline pointers passed back
-    uint16_t* bufptr;
+    uint32_t* bufptr;
     while (queue_try_remove_u32(&dvi0.q_colour_free, &bufptr))
         ;
     // // Note first two scanlines are pushed before DVI start
     static uint scanline = SCANLINE_INIT;
-    bufptr = &framebuf[FRAME_MAX_WIDTH * scanline];
+    bufptr = (uint32_t*)&framebuf[FRAME_BYTES_PER_LINE * scanline];
     queue_add_blocking_u32(&dvi0.q_colour_valid, &bufptr);
     scanline = (scanline + 1) % FRAME_MAX_HEIGHT;
     _g.linecnt++;
 }
 
 //1scanline分vramの内容をframebufに反映する
-//framebufには320*240ピクセルの色情報が入っている(ここでは白か黒)
+//framebufには720*240ピクセルの2bpp色情報が入っている(白0b11/黒0b00)
 //vramには32*24の文字情報が入っている(mag=1の場合)
 //_g.screen_bigは0~3の範囲
 void vram_to_framebuf_scanline(uint scanline, bool visible_cursor) {
@@ -52,7 +73,9 @@ void vram_to_framebuf_scanline(uint scanline, bool visible_cursor) {
     int mag = 1 << _g.screen_big;//文字の大きさの倍率　最大8倍
     if (0 <= vram_y && vram_y < SCREEN_H) {//scanlineが画面の表示範囲なら処理、そうでなければ黒のままでいいので何もしない
         int font_y = ((scanline - MARGIN_HEIGHT) % (FONT_SIZE << _g.screen_big)) >> _g.screen_big;
-        uint16_t* framebuf_base = &framebuf[scanline * FRAME_MAX_WIDTH + MARGIN_WIDTH];
+        uint32_t acc = 0;
+        int nbits = 0;
+        uint8_t* dst = text_line;
         uint8* c = &vram[vram_y * SCREEN_W];
         for (int vram_x = 0; vram_x < SCREEN_W; vram_x++) {
             unsigned char char_line = CHAR_PATTERN[*c * FONT_SIZE + font_y];
@@ -65,47 +88,32 @@ void vram_to_framebuf_scanline(uint scanline, bool visible_cursor) {
                 char_line ^= key_flg.insert ? 0xff : 0xf0;//上書きモードなら文字全体を反転、挿入モードなら文字の左半分を反転
             }
             for (int x = 0; x < FONT_SIZE; x++) {
-                int pixel = 0xffff * ((char_line >> (7 - x)) & 0x01);//char_lineのビットが1なら0xffff(白)、0なら0x0000(黒)に変換
-                // for (int y = 0; y < mag; y++) {
-                //     *framebuf_base = pixel;
-                //     framebuf_base++;
-                // }
-                //展開するとめちゃくちゃ速くなる
-                //duff's deviceは速くならなかった
-                if (mag == 1) {
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                } else if (mag == 2) {
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                } else if (mag == 4) {
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                } else if (mag == 8) {
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
-                    *framebuf_base = pixel;
-                    framebuf_base++;
+                uint32_t pixel = (char_line >> (7 - x)) & 0x01;
+                for (int k = 0; k < mag; k++) {//文字の拡大 (各ピクセルをmag個複製)
+                    acc |= pixel << nbits;
+                    if (++nbits == 8) {
+                        *dst++ = (uint8_t)acc;
+                        acc = 0;
+                        nbits = 0;
+                    }
+                }
+            }
+        }
+        //256ピクセル(1bpp)を576ピクセル(2bpp)へ横9/4拡大する
+        //(4ピクセルを9ピクセルへ、幅3,2,2,2で拡大する)
+        uint8_t* out = &framebuf[scanline * FRAME_BYTES_PER_LINE + MARGIN_WIDTH * 2 / 8];
+        acc = 0;
+        nbits = 0;
+        for (int i = 0; i < sizeof(text_line); i++) {
+            uint8_t b = text_line[i];
+            for (int half = 0; half < 2; half++) {
+                uint32_t pat = expand9_2bpp[(b >> (half * 4)) & 0x0f];
+                acc |= pat << nbits;
+                nbits += 18;
+                while (nbits >= 8) {
+                    *out++ = (uint8_t)acc;
+                    acc >>= 8;
+                    nbits -= 8;
                 }
             }
         }
@@ -228,7 +236,7 @@ static bool dvi_initialized = false;
 void picodvi_init();//後ろで定義
 
 //SWITCHコマンドでDVI(HDMI)/NTSC(コンポジット)/TFT(ILI9341)を切り替える
-//NTSCは専用クロック (157.5MHz)、DVI/TFTは同一クロック (252MHz) なのでTFT⇔DVIはクロック変更不要
+//NTSCは専用クロック (157.5MHz)、DVI/TFTは同一クロック (270MHz) なのでTFT⇔DVIはクロック変更不要
 //NTSCとの切替では両システムの停止/再開と、クロック依存の周辺 (UART/PWM/SPI) の再設定を行う
 void video_switch_mode(uint8_t mode) {
     bool active = video_active();
@@ -442,11 +450,11 @@ void picodvi_init() {
 
     // Once we've given core 1 the framebuffer, it will just keep on displaying
     // it without any intervention from core 0
-    sprite_fill16(framebuf, 0x0000, FRAME_MAX_WIDTH * FRAME_MAX_HEIGHT);
-    uint16_t* bufptr = framebuf;
+    sprite_fill8(framebuf, 0x00, sizeof(framebuf));
+    uint32_t* bufptr = (uint32_t*)framebuf;
     for (int i = 0; i < SCANLINE_INIT; i++) {
         queue_add_blocking_u32(&dvi0.q_colour_valid, &bufptr);
-        bufptr += FRAME_MAX_WIDTH;
+        bufptr += FRAME_BYTES_PER_LINE / 4;
     }
 
     multicore_launch_core1(core1_main);

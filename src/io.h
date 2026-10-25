@@ -22,7 +22,7 @@
 #define PLEN_MAX 2000
 #define ANA_THRESHOLD (1024 / 4)
 
-//ラズパイの動作クロック (DVI:252MHz) に関わらず
+//ラズパイの動作クロック (DVI:270MHz) に関わらず
 //PWMのカウントクロックを常に1MHzにする (clkdiv = sysクロック/1MHz)
 //IchigoJamのPWMは1周期20msなので50Hz
 //https://rikei-tawamure.com/entry/2021/02/08/213335#PWM%E7%94%A8%E3%82%AB%E3%82%A6%E3%83%B3%E3%82%BF PWMの計算方法は左記参照

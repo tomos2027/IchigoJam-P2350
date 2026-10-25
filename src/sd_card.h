@@ -110,7 +110,7 @@ static void sd_card_off(void) {
     sd_initialized = false; sd_fat_ready = false; sd_files_index_ready = false; sd_pins_reserved = false; sd_block_addressed = false;
 }
 
-//クロック切替 (DVI 252MHz⇔NTSC 157.5MHz) の後に呼ぶ: SDがSPI1使用中ならbaudを再設定する
+//クロック切替 (DVI 270MHz⇔NTSC 157.5MHz) の後に呼ぶ: SDがSPI1使用中ならbaudを再設定する
 //(SPIのbaudはclk_peri由来のため、システムクロックが変わると実際の通信速度が変わってしまう)
 static void sd_reconfig_spi() {
     if (sd_pins_reserved) {

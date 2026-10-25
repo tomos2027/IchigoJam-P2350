@@ -28,7 +28,7 @@ void recover_from_sleep() {
 
     //rosc再開、クロック復元(clocks_init相当)、UART再設定
     sleep_power_up();
-    //クロックはビデオモード依存 (NTSC:157.5MHz、DVI/TFT:252MHz)
+    //クロックはビデオモード依存 (NTSC:157.5MHz、DVI/TFT:270MHz)
     set_sys_clock_khz(video_output_mode == VIDEO_MODE_NTSC ? NTSC_CLOCK_KHZ : DVI_TIMING.bit_clk_khz, true);
     set_uart_bps();
     io_reconfig_pwm();//クロックが変わったのでPWMの分周比を再設定

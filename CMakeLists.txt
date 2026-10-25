@@ -48,6 +48,8 @@ target_include_directories(IchigoJam_P2350 PUBLIC
 # PicoDVI/software/apps/mandelbrot/CMakeLists.txt から引用
 target_compile_definitions(IchigoJam_P2350 PRIVATE
 	DVI_DEFAULT_SERIAL_CONFIG=${DVI_DEFAULT_SERIAL_CONFIG}
+	# 文字表示はモノクロ2bpp。TMDSバッファを1レーン分に削減し、全レーンで共有する
+	DVI_MONOCHROME_TMDS=1
 	# IchigoJam P (RP2040版) と同一のGPIO番号に揃える (stdio_uartとi2c_defaultがここに追従、i2c.h/i2ceeprom.hは無修正)
 	PICO_DEFAULT_UART=0
 	PICO_DEFAULT_UART_TX_PIN=0
