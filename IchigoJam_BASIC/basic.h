@@ -3701,9 +3701,14 @@ S_INLINE void command_iot_out() {
 #endif
 
 S_INLINE void command_ws_out() {
-	//WS.LED port,n[,repeat] ポート選択式 (4K版): port=1-7 (OUT1-6、7=LED/GP2)、n=LED数、色データは[0]〜
+	//WS.LED port,n[,repeat] ポート選択式 (4K版): port=1-7 (OUT1-6、7=LED/GP2)、n=LED数、色データは[0]〜、repeat=送信回数 (省略時1)
 	int port = token_expression();
 	IJB_ERR_CHK();
+	int code = token_getCode();
+	if (code != TOKEN_COMMA) {
+		command_error(ERR_SYNTAX_ERROR);
+		return;
+	}
 	int n = token_expression();
 	IJB_ERR_CHK();
 	int m = token_option1(1);
