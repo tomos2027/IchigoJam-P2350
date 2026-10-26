@@ -86,7 +86,11 @@ target_link_libraries(IchigoJam_P2350 PUBLIC
 	hardware_i2c
 	hardware_spi
 	hardware_sleep
+	hardware_pio
 )
+
+# WS.LED (WS2812B) はPIOで波形を生成する (CPUの長時間割込み禁止を避ける)
+pico_generate_pio_header(IchigoJam_P2350 ${CMAKE_CURRENT_LIST_DIR}/src/ws2812.pio)
 
 # pico_enable_stdio_usb(IchigoJam_P2350 0)
 pico_enable_stdio_uart(IchigoJam_P2350 1)

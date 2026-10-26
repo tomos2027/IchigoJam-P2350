@@ -194,9 +194,11 @@ void ntsc_init() {
     clearscreen();
 }
 
-//flashの設定セクタからビデオモードを読み込む ([0]はKBD用、[1]をビデオモードに使用)
+//flashの設定セクタからビデオモードを読み込む ([0]はKBD用、[1]をビデオモード、[2]をTFTの180°回転に使用)
 uint8_t get_video_mode_config() {
-    uint8_t mode = get_flash(get_config_offset())[1];
+    const uint8_t* config = get_flash(get_config_offset());
+    tft_flip = config[2] != 0;
+    uint8_t mode = config[1];
     return mode <= VIDEO_MODE_TFT ? mode : VIDEO_MODE_DVI;
 }
 
@@ -205,6 +207,7 @@ void save_video_mode_config(uint8_t mode) {
     uint32_t offset = get_config_offset();
     memcpy(tflash, get_flash(offset), FLASH_SECTOR_SIZE);
     tflash[1] = mode;
+    tflash[2] = tft_flip;//TFTの180°回転設定も併せて保存
     if (video_output_mode == VIDEO_MODE_DVI) {
         //DVIは書込中に映像を維持できないため、停止/再開する (停止状態だったら再開しない)
         bool active = video_active();
@@ -278,15 +281,23 @@ void video_switch_mode(uint8_t mode) {
 
 //SWITCHコマンドの実体 (basic.hのcommand_lcdから呼ばれる)
 //SWITCH 0:DVI(HDMI)、SWITCH 1:NTSC(コンポジット)、SWITCH 2:TFT(ILI9341)、SWITCH (引数なし): 次のモードへ
-void IJB_lcd(uint mode) {
+//flip: -1=変更なし (省略/F10トグル時。設定は維持される)、0:TFT通常向き、1:TFT180°回転 (0/1指定時はflashに保存)
+void IJB_lcd(uint mode, int flip) {
     if (mode > VIDEO_MODE_TFT) {
         mode = VIDEO_MODE_DVI;
+    }
+    if (flip >= 0 && tft_flip != (flip != 0)) {
+        tft_set_flip(flip != 0);
+        screen_clear();//180°回転でTFTの描画座標系が反転するため、画面を消去して残留を防ぐ
+        if ((uint8)mode == video_output_mode) {
+            save_video_mode_config(video_output_mode);//モード切替なしならここで保存 (切替時はvideo_switch_mode内で保存される)
+        }
     }
     _g.display_mode = mode;
     if ((uint8)mode == video_output_mode) {
         return;
     }
-    video_switch_mode(mode);
+    video_switch_mode(mode);//TFTモードへの切替時はtft_startで新しいMADCTL (180°設定) が反映される
 }
 
 //hid_app.cが複雑になってるので、もっと簡潔に処理できるなら直したい

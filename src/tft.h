@@ -37,6 +37,8 @@ static uint8_t tft_shadow_vram[TFT_COLS * TFT_ROWS];//最後に表示したVRAM�
 static int16_t tft_shadow_cx = -1, tft_shadow_cy = -1;//最後に表示したカーソル位置
 static uint8_t tft_shadow_invert = 0;
 static uint8_t tft_shadow_mag = 0;
+static bool tft_flip = false;//SWITCH 2,1: 画面を180°回転 (MADCTL 0xE8=MV|MX|MY)
+static bool tft_madctl_pending = false;//tft_set_flipで設定、tft_update内でMADCTL書換+全画面消去
 
 static int tft_active() {
     return tft_initialized && !tft_stopped;
@@ -136,8 +138,8 @@ static void tft_hw_init() {
     tft_write_reg(0xF2, enable3g, 1);//3Gガンマ無効
     static const uint8_t gammaset[] = {0x01};
     tft_write_reg(0x26, gammaset, 1);
-    static const uint8_t madctl[] = {0x28};//横長 (MV|BGR。白黒2色なので色順序は影響しない)
-    tft_write_reg(0x36, madctl, 1);
+    uint8_t madctl = tft_flip ? 0xE8 : 0x28;//横長 (MV|BGR、180°回転時はMV|MX|MY。白黒2色なので色順序は影響しない)
+    tft_write_reg(0x36, &madctl, 1);
     static const uint8_t colmod[] = {0x55};//16bpp
     tft_write_reg(0x3A, colmod, 1);
     static const uint8_t gmctrp[] = {0x0F, 0x31, 0x2B, 0x0C, 0x0E, 0x08, 0x4E, 0xF1, 0x37, 0x07, 0x10, 0x03, 0x0E, 0x09, 0x00};
@@ -200,7 +202,7 @@ static void tft_update(bool visible_cursor) {
     }
     int ncells = SCREEN_W * SCREEN_H;
     //まず差分があるか確認する (変化がなければSPIバスに触れない)
-    bool any = tft_force_redraw || tft_shadow_invert != _g.screen_invert || tft_shadow_mag != _g.screen_big;
+    bool any = tft_force_redraw || tft_madctl_pending || tft_shadow_invert != _g.screen_invert || tft_shadow_mag != _g.screen_big;
     if (!any) {
         for (int i = 0; i < ncells; i++) {
             if (tft_shadow_vram[i] != vram[i]) {
@@ -216,6 +218,15 @@ static void tft_update(bool visible_cursor) {
         return;//SDカードがSPI1を使用中 → このフレームは更新しない (SDOFF後の次フレームで反映される)
     }
     tft_spi_init();
+    if (tft_madctl_pending) {
+        //180°回転の反映: MADCTL書換後に全画面を消去する (座標系が反転するため、旧座標系に書かれた
+        //GRAMは差分更新では消せない。消去後はforce_redrawで現在のvramを全再描画)
+        uint8_t madctl = tft_flip ? 0xE8 : 0x28;
+        tft_write_reg(0x36, &madctl, 1);
+        tft_fill_black();
+        tft_madctl_pending = false;
+        tft_force_redraw = true;
+    }
     for (int y = 0; y < SCREEN_H; y++) {
         for (int x = 0; x < SCREEN_W; x++) {
             int i = y * SCREEN_W + x;
@@ -234,6 +245,16 @@ static void tft_update(bool visible_cursor) {
 
 //TFT表示を開始する (video_switch_mode・video_output_initから呼ばれる)
 //SDON中 (SDがSPI1占有中) のときはSDを一旦オフにしてTFTを優先する (再度SDONでSDは使用可)
+//SWITCH 2,1用: 画面の180°回転を設定する
+//MADCTL (MX/MY) はILI9341の描画座標系ごと反転させるため、反転前に書かれたGRAMは
+//新しい座標系の差分更新では上書きされず残留する。そのため反映はtft_update (60Hzタイマー割り込み内) で
+//「MADCTL書換 → 全画面消去 → 全セル再描画」の順で行う。
+//ここではフラグの設定のみ行い、メインラインからSPIを直接触らない (tft_updateとのSPIトランザクション競合の回避)
+void tft_set_flip(bool flip) {
+    tft_flip = flip;
+    tft_madctl_pending = true;
+}
+
 void tft_start() {
     if (sd_pins_reserved) {
         sd_card_off();
@@ -250,6 +271,7 @@ void tft_start() {
         tft_spi_init();
         tft_hw_init();
         tft_initialized = true;
+        tft_madctl_pending = false;//hw_initで現在のtft_flipどおりのMADCTLと全画面消去が済んでいる
     }
     tft_stopped = false;
     tft_force_redraw = true;//起動・再開時はシャドウを信頼せず全セル再描画する

@@ -69,7 +69,7 @@ S_INLINE int IJB_i2c(uint8 writemode, uint16* param); // -1:ad error 1:ok 0:i2c 
 S_INLINE int IJB_peek(int ad);
 S_INLINE void IJB_poke(int ad, int n);
 S_INLINE int IJB_usr(int ad, int n);
-S_INLINE void IJB_lcd(uint mode); // 1.2b32
+S_INLINE void IJB_lcd(uint mode, int flip); // 1.2b32
 #ifndef NO_KBD_COMMAND
 S_INLINE void IJB_kbd(uint mode); // 1.5b1
 #ifdef VERSION15
@@ -116,7 +116,7 @@ static void iot_out2(int ad, int len, int flash);
 
 #endif
 
-S_INLINE void ws_out(int port, int nled, int reapeat);
+static void ws_out(int port, int nled, int reapeat);
 
 // util -----------------------------------------------------
 
@@ -3422,6 +3422,7 @@ S_INLINE void command_at() {
 
 S_INLINE void command_lcd() { // 1.2b32, 1.3.2b12 contrast 292->248 +44byte
 	uint n = _g.display_mode >= 2 ? 0 : _g.display_mode + 1;//引数なし: DVI→NTSC→TFT→DVIの順でトグル (実体はIJB_lcdで処理)
+	int flip = -1;//-1: 省略 (180°回転設定は変更しない)、0: TFT通常向き、1: TFT180°回転
 	int code = token_getCode(); // ELSE対策 1.2b61
 	token_back();
 	if (code != TOKEN_NULL && code != TOKEN_ELSE) {
@@ -3432,12 +3433,12 @@ S_INLINE void command_lcd() { // 1.2b32, 1.3.2b12 contrast 292->248 +44byte
 		if (code != TOKEN_COMMA) {
 			token_back();
 		} else {
-			n += token_expression();
+			flip = token_expression();//SWITCH 2,1: TFT液晶を180°回転 (旧コードは第2引数をnに加算しモード番号が化けていた)
 			IJB_ERR_CHK();
 		}
 	}
 	token_end();
-	IJB_lcd(n);
+	IJB_lcd(n, flip);
 }
 
 S_INLINE void command_ok() { // 1.2b42 表示オフ追加、b53で OK0からOK2に変更

@@ -43,7 +43,7 @@ With Docker (BuildKit), everything — cloning the pinned dependencies, applying
 | `VER()` | 16130 |
 | `VER(1)` (platform) | 9 (RP2350) |
 | Clock | DVI/TFT: 270 MHz, NTSC: 157.5 MHz (both overclocked, VREG 1.20V) |
-| Video output | `SWITCH` command selects 0:DVI (HDMI) / 1:NTSC composite (GP3) / 2:TFT ILI9341 (GP12-16), persisted to flash |
+| Video output | `SWITCH` command selects 0:DVI (HDMI) / 1:NTSC composite (GP3) / 2:TFT ILI9341 (GP12-16), persisted to flash. `SWITCH 2,1` rotates the TFT image by 180 degrees (also persisted) |
 | Internal storage | 100 slots at the end of flash (4096 bytes each) |
 | SD format | FAT32 (MBR/superfloppy), 8.3 names, root only |
 
