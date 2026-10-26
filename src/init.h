@@ -509,11 +509,12 @@ void ichigojam_init() {
 #ifdef IJB_TITLE
     for (int i = 0;; i++) { // 自動起動時は表示だけしない
         char c = IJB_TITLE[i];
+        if (!c) {
+            break;//NULまで出力 (タイトルが複数行でも全体を表示する)
+        }
         if (!sleepflg)
             put_chr(c);
         video_waitSync(1);
-        if (c == '\n')
-            break;
     }
 #endif
     if (!sleepflg) {

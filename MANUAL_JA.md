@@ -42,7 +42,8 @@ IchigoJam P2350 は、教育用こどもパソコン **IchigoJam** (BASIC言語)
 2. 画面に以下が表示されれば正常です:
 
 ```
-IchigoJam BASIC 1.6.1 by jig.jp forked by na-s.jp
+Milkjam Basic 1.6.1 by RP2350PZ
+forked by NEXTDAY
 OK
 ```
 
